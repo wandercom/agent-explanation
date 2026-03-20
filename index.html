@@ -1,0 +1,1447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta property="og:title" content="Wander Agent Service Architecture">
+<meta property="og:description" content="How AI agents share a brain across voice, SMS, email, and chat">
+<title>Wander Agent Service</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #fafafa;
+    --surface: #fff;
+    --surface-alt: #f5f5f5;
+    --border: #e5e5e5;
+    --border-focus: #a3a3a3;
+    --text: #171717;
+    --text-secondary: #525252;
+    --text-muted: #a3a3a3;
+    --accent: #171717;
+    --green: #16a34a;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  .header {
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    padding: 24px 0;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-inner {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
+  .header h1 span { color: var(--text-muted); font-weight: 400; }
+  .step-indicator {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .main {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 32px 24px 100px;
+  }
+
+  .scenario { display: none; animation: fadeIn 0.3s ease; }
+  .scenario.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  .scenario-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .scenario-title { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 6px; }
+  .scenario-subtitle { font-size: 15px; color: var(--text-secondary); margin-bottom: 32px; max-width: 640px; }
+
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    margin-bottom: 24px;
+    overflow: hidden;
+  }
+
+  .flow { display: flex; flex-direction: column; gap: 0; }
+  .flow-row { display: flex; align-items: stretch; gap: 16px; }
+
+  .node {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .node.highlight { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .node-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  .node-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .node-body { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+
+  .channel-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--surface-alt);
+    color: var(--text-secondary);
+  }
+  .channel-badge.crossed { text-decoration: line-through; opacity: 0.4; }
+
+  .narration {
+    background: var(--surface-alt);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .narration-step {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .narration-text { font-size: 14px; color: var(--text); line-height: 1.6; }
+  .narration-text strong { font-weight: 600; }
+
+  .brain-sections { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .brain-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-secondary);
+  }
+  .brain-tag.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+  .tool-call {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-top: 8px;
+  }
+  .tool-call .fn { color: var(--text); font-weight: 500; }
+  .tool-call .args { color: var(--text-secondary); }
+  .tool-call .result {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid var(--border);
+    color: var(--green);
+  }
+
+  .brain-write {
+    border-left: 2px solid var(--accent);
+    padding-left: 12px;
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .brain-write .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+  }
+
+  .convo { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+  .msg {
+    max-width: 80%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .msg.guest { align-self: flex-end; background: var(--accent); color: white; border-bottom-right-radius: 4px; }
+  .msg.agent { align-self: flex-start; background: var(--surface-alt); border: 1px solid var(--border); border-bottom-left-radius: 4px; color: var(--text); }
+  .msg.full { max-width: 100%; }
+  .msg-sender {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+  }
+  .msg-sender.right { text-align: right; }
+
+  .arch-diagram {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .arch-row { display: grid; grid-template-columns: 120px 1fr; gap: 1px; background: var(--border); }
+  .arch-label {
+    background: var(--surface-alt);
+    padding: 14px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+  }
+  .arch-content {
+    background: var(--surface);
+    padding: 14px 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  .arch-item {
+    padding: 3px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    font-size: 12px;
+    background: var(--surface);
+  }
+
+  /* Divider between steps */
+  .step-divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 0;
+    color: var(--text-muted);
+  }
+  .step-divider svg { display: block; }
+
+  /* Timeline marker */
+  .time-skip {
+    text-align: center;
+    padding: 12px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-top: 1px dashed var(--border);
+    border-bottom: 1px dashed var(--border);
+    margin-bottom: 24px;
+  }
+
+  /* Email block */
+  .email-block {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    padding: 4px 0;
+  }
+
+  /* Generated content block */
+  .gen-content {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.8;
+    padding: 12px 16px;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-top: 8px;
+  }
+  .gen-content strong { color: var(--text); }
+
+  /* Nav */
+  .nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 16px 0;
+    z-index: 100;
+  }
+  .nav-inner {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .nav-tabs {
+    display: flex;
+    gap: 2px;
+    background: var(--surface-alt);
+    border-radius: 6px;
+    padding: 2px;
+    border: 1px solid var(--border);
+  }
+  .nav-tab {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 6px 12px;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .nav-tab:hover { color: var(--text-secondary); }
+  .nav-tab.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+
+  .nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 20px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .nav-btn:hover { border-color: var(--border-focus); }
+  .nav-btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  .nav-btn.primary:hover { opacity: 0.9; }
+  .nav-btn:disabled { opacity: 0.3; cursor: default; }
+  .nav-arrows { display: flex; gap: 6px; }
+
+  .progress { display: flex; gap: 4px; align-items: center; }
+  .progress-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: background 0.2s;
+  }
+  .progress-dot.done { background: var(--accent); }
+  .progress-dot.current { background: var(--accent); width: 18px; border-radius: 3px; }
+
+  @media (max-width: 640px) {
+    .flow-row { flex-direction: column; }
+    .arch-row { grid-template-columns: 1fr; }
+    .scenario-title { font-size: 22px; }
+    .nav-tabs { overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <h1>Wander <span>/ Agent Service</span></h1>
+    <div class="step-indicator" id="stepIndicator"></div>
+  </div>
+</div>
+
+<div class="main" id="main">
+
+  <!-- ================= OVERVIEW ================= -->
+  <div class="scenario active" id="scene-overview">
+    <div class="scenario-label">Architecture</div>
+    <div class="scenario-title">Three pillars, one brain</div>
+    <div class="scenario-subtitle">
+      Every agent shares the same brand knowledge and conversation history.
+      A guest who calls on Monday and emails on Wednesday never repeats themselves.
+    </div>
+
+    <div class="diagram">
+      <div class="arch-diagram">
+        <div class="arch-row">
+          <div class="arch-label">Channels</div>
+          <div class="arch-content">
+            <span class="arch-item">Voice</span>
+            <span class="arch-item">SMS</span>
+            <span class="arch-item">Email</span>
+            <span class="arch-item">Chat</span>
+          </div>
+        </div>
+        <div class="arch-row">
+          <div class="arch-label">Agents</div>
+          <div class="arch-content">
+            <span class="arch-item">Sales</span>
+            <span class="arch-item">Customer Service</span>
+            <span class="arch-item">Marketing</span>
+          </div>
+        </div>
+        <div class="arch-row">
+          <div class="arch-label">Tools</div>
+          <div class="arch-content">
+            <span class="arch-item">search-properties</span>
+            <span class="arch-item">check-availability</span>
+            <span class="arch-item">get-pricing</span>
+            <span class="arch-item">lookup-booking</span>
+            <span class="arch-item">send-sms</span>
+            <span class="arch-item">send-email</span>
+            <span class="arch-item">escalate-to-human</span>
+            <span class="arch-item">generate-seo-content</span>
+            <span class="arch-item">analyze-reviews</span>
+          </div>
+        </div>
+        <div class="arch-row">
+          <div class="arch-label">Brain</div>
+          <div class="arch-content">
+            <span class="arch-item">Identity</span>
+            <span class="arch-item">Voice & Tone</span>
+            <span class="arch-item">Audience</span>
+            <span class="arch-item">Business Intel</span>
+            <span class="arch-item">Hospitality</span>
+            <span class="arch-item">Visual</span>
+          </div>
+        </div>
+        <div class="arch-row">
+          <div class="arch-label">Memory</div>
+          <div class="arch-content">
+            <span class="arch-item">Conversations</span>
+            <span class="arch-item">Messages (all channels)</span>
+            <span class="arch-item">Guest preferences</span>
+            <span class="arch-item">Interaction history</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">How it works</div>
+      <div class="narration-text">
+        A guest contacts Wander through any channel. The agent service identifies them,
+        loads their conversation history across <strong>all</strong> channels, pulls relevant brand knowledge
+        from the brain, and uses its tools to help. Every interaction is saved back &mdash;
+        so the next agent on the next channel already knows everything.
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Key idea</div>
+      <div class="narration-text">
+        Each agent reads only the brain sections it needs. Sales reads identity, voice, audience, business, and hospitality.
+        Customer service reads identity, voice, and hospitality.
+        Marketing reads identity, voice, audience, business, and visual.
+        <strong>Same brain, different slices.</strong>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SALES SCENARIO ================= -->
+  <div class="scenario" id="scene-sales">
+    <div class="scenario-label">Sales Agent &mdash; Complete Flow</div>
+    <div class="scenario-title">From cold call to warm handoff</div>
+    <div class="scenario-subtitle">
+      A new guest calls about an Aspen cabin. Over two days and two channels,
+      the agent finds the right property, remembers everything, and hands off
+      to a property manager with full context.
+    </div>
+
+    <!-- S1: Inbound call + identify -->
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node highlight" style="flex: 0 0 180px;">
+            <div class="node-label">Channel</div>
+            <div class="channel-badge">Voice</div>
+            <div style="margin-top: 8px; font-size: 13px; color: var(--text-secondary);">
+              Inbound call from<br>+1 (303) 555-0147
+            </div>
+          </div>
+          <div class="node" style="flex: 1;">
+            <div class="node-label">Agent identifies guest</div>
+            <div class="tool-call">
+              <div><span class="fn">lookup-guest</span> <span class="args">{ phone: "+13035550147" }</span></div>
+              <div class="result">New guest &mdash; no prior conversations found</div>
+            </div>
+            <div class="brain-write">
+              <div class="label">Saved to memory</div>
+              New conversation created. Channel: voice. Phone: +1 (303) 555-0147.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 1</div>
+      <div class="narration-text">
+        A guest calls the Wander number. The agent checks if they've contacted us before on any channel &mdash;
+        phone, email, or chat. New guest. A conversation is created and <strong>every word from here is recorded.</strong>
+      </div>
+    </div>
+
+    <!-- S2: Load brain + greeting -->
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node" style="flex: 1;">
+            <div class="node-label">Brain &mdash; sections loaded for sales</div>
+            <div class="brain-sections">
+              <span class="brain-tag active">identity</span>
+              <span class="brain-tag active">voice</span>
+              <span class="brain-tag active">audience</span>
+              <span class="brain-tag active">business</span>
+              <span class="brain-tag active">hospitality</span>
+              <span class="brain-tag">visual</span>
+            </div>
+            <div class="node-body" style="margin-top: 10px;">
+              The agent now knows the brand name, how to greet guests, the tone to use,
+              what property types exist, where they are, what makes them special,
+              and how to handle common guest questions.
+            </div>
+          </div>
+          <div class="node highlight" style="flex: 1;">
+            <div class="node-label">Conversation begins</div>
+            <div class="convo">
+              <div class="msg-sender">Sales Agent (voice)</div>
+              <div class="msg agent">Hey there, welcome to Wander! I'm here to help you find the perfect place. What are you looking for?</div>
+              <div class="msg-sender right">Guest</div>
+              <div class="msg guest">Hi, I'm looking for a cabin in Aspen for New Year's. Something with a hot tub, maybe 4 bedrooms? We're a group of 8.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 2</div>
+      <div class="narration-text">
+        The agent loads 5 brain sections &mdash; everything a sales agent needs. It greets the guest
+        in the brand's voice (warm, not corporate) and listens to what they want.
+        <strong>The greeting itself comes from the brain's hospitality section.</strong>
+      </div>
+    </div>
+
+    <!-- S3: Search properties -->
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node highlight" style="flex: 1;">
+            <div class="node-label">Tool: search properties</div>
+            <div class="tool-call">
+              <div><span class="fn">search-properties</span> <span class="args">{ location: "Aspen, CO", bedrooms: 4, guests: 8, amenities: ["hot-tub"] }</span></div>
+              <div class="result">3 properties found: Elk Ridge Lodge (aspen-01), Snowmass Retreat (aspen-02), Maroon Bells Cabin (aspen-03)</div>
+            </div>
+          </div>
+          <div class="node" style="flex: 1;">
+            <div class="node-label">Agent narrows it down</div>
+            <div class="convo">
+              <div class="msg agent full">I found 3 cabins that fit &mdash; all in Aspen, 4+ bedrooms, with hot tubs. Let me check which ones are available for New Year's and what they'd run you.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 3</div>
+      <div class="narration-text">
+        The agent searches using the guest's exact criteria. It doesn't just return results &mdash;
+        it tells the guest what's happening next: checking availability and pricing.
+        <strong>The agent never presents a property without confirming it's available first.</strong>
+      </div>
+    </div>
+
+    <!-- S4: Availability + pricing -->
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node highlight" style="flex: 1;">
+            <div class="node-label">Tools: availability + pricing</div>
+            <div class="tool-call">
+              <div><span class="fn">check-availability</span> <span class="args">{ unitIds: ["aspen-01", "aspen-02", "aspen-03"], checkIn: "2026-12-29", checkOut: "2027-01-02" }</span></div>
+              <div class="result">2 available: aspen-01 (Elk Ridge), aspen-02 (Snowmass). aspen-03 booked.</div>
+            </div>
+            <div class="tool-call">
+              <div><span class="fn">get-pricing</span> <span class="args">{ unitId: "aspen-01", checkIn: "2026-12-29", checkOut: "2027-01-02", guests: 8 }</span></div>
+              <div class="result">$4,200 total (4 nights, cleaning fee included)</div>
+            </div>
+            <div class="tool-call">
+              <div><span class="fn">get-pricing</span> <span class="args">{ unitId: "aspen-02", checkIn: "2026-12-29", checkOut: "2027-01-02", guests: 8 }</span></div>
+              <div class="result">$3,800 total (4 nights, cleaning fee included)</div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top: 16px;">
+          <div class="node">
+            <div class="node-label">Agent presents options</div>
+            <div class="convo">
+              <div class="msg agent full">
+                Two are available for Dec 29 to Jan 2. Elk Ridge Lodge is $4,200 for the stay &mdash;
+                it's got a private hot tub overlooking the valley, ski-in access, and a big gourmet kitchen.
+                Snowmass Retreat is $3,800 &mdash; more secluded, bigger deck, same hot tub setup.
+                Any of those grab you?
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 4</div>
+      <div class="narration-text">
+        Three tool calls: check availability for all three, then get pricing for the two that are open.
+        <strong>The agent never estimates a price</strong> &mdash; it always calls the pricing service.
+        It presents both options with what makes each one different, using business intel from the brain.
+      </div>
+    </div>
+
+    <!-- S5: Guest asks follow-ups -->
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node highlight" style="flex: 1;">
+            <div class="node-label">Guest digs deeper</div>
+            <div class="convo">
+              <div class="msg-sender right">Guest</div>
+              <div class="msg guest">Tell me more about Elk Ridge. How close to the slopes? Is the kitchen actually big enough for 8 people cooking?</div>
+            </div>
+            <div class="tool-call" style="margin-top: 12px;">
+              <div><span class="fn">get-property-details</span> <span class="args">{ unitId: "aspen-01" }</span></div>
+              <div class="result">4BR/3BA, 2,800 sq ft. 200ft to lift. Kitchen: Wolf range, double oven, island seats 6. Dining table seats 10. Ski storage room. Heated driveway.</div>
+            </div>
+          </div>
+          <div class="node" style="flex: 1;">
+            <div class="node-label">Agent responds with detail</div>
+            <div class="convo">
+              <div class="msg agent full">
+                Elk Ridge is about 200 feet from the nearest lift &mdash; genuinely ski-in.
+                The kitchen has a Wolf range, double oven, and an island that seats 6, plus the dining
+                table fits 10. So yeah, plenty of room for everyone to be in there at once.
+                There's also a ski storage room and the driveway is heated, so no ice.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 5</div>
+      <div class="narration-text">
+        The guest asks specific questions. The agent pulls detailed property info and answers naturally &mdash;
+        no "let me transfer you" or "check the website." It <strong>uses real data, not marketing fluff.</strong>
+      </div>
+    </div>
+
+    <!-- S6: Guest says "let me think" + agent follows up -->
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node" style="flex: 1;">
+            <div class="node-label">Guest pauses</div>
+            <div class="convo">
+              <div class="msg-sender right">Guest</div>
+              <div class="msg guest">That sounds great. Let me talk to the group and get back to you.</div>
+              <div class="msg-sender">Sales Agent</div>
+              <div class="msg agent">Of course! I'll text you a quick summary so you have everything handy. Take your time.</div>
+            </div>
+          </div>
+          <div class="node highlight" style="flex: 1;">
+            <div class="node-label">Agent sends follow-up SMS</div>
+            <div class="tool-call">
+              <div><span class="fn">send-sms</span> <span class="args">{ to: "+13035550147", body: "Hey! Here's what we talked about:\n\nElk Ridge Lodge - $4,200 (Dec 29-Jan 2)\n4BR, hot tub, ski-in, gourmet kitchen\n\nSnowmass Retreat - $3,800\nMore secluded, bigger deck\n\nJust text me when you're ready!" }</span></div>
+              <div class="result">SMS delivered</div>
+            </div>
+            <div class="brain-write">
+              <div class="label">Saved to memory</div>
+              Guest interested in Elk Ridge Lodge (primary) and Snowmass Retreat (backup).
+              Group of 8. Priorities: hot tub, ski-in, big kitchen. Needs to consult group.
+              Follow-up SMS sent with summary.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 6</div>
+      <div class="narration-text">
+        The guest needs to think. Instead of a dead end, the agent <strong>texts a summary</strong>
+        so the guest can share it with their group. Everything is saved to memory: which properties,
+        what they care about, where the conversation stands.
+      </div>
+    </div>
+
+    <!-- TIME SKIP -->
+    <div class="time-skip">Next day &mdash; guest returns via SMS</div>
+
+    <!-- S7: Cross-channel return -->
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node" style="flex: 0 0 180px;">
+            <div class="node-label">Channel switch</div>
+            <div class="channel-badge crossed">Voice</div>
+            <div style="margin-top: 6px;"></div>
+            <div class="channel-badge">SMS</div>
+            <div style="margin-top: 8px; font-size: 13px; color: var(--text-secondary);">
+              Same phone number
+            </div>
+          </div>
+          <div class="node highlight" style="flex: 1;">
+            <div class="node-label">Shared memory &mdash; agent already knows everything</div>
+            <div class="convo">
+              <div class="msg-sender right">Guest (SMS)</div>
+              <div class="msg guest">Hey we're in. Let's do Elk Ridge for NYE!</div>
+              <div class="msg-sender">Sales Agent</div>
+              <div class="msg agent">Great choice! Elk Ridge Lodge, Dec 29 &ndash; Jan 2, $4,200 for your group of 8. Let me connect you with the property manager to get everything set up. I'll text you their direct line right now.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 7</div>
+      <div class="narration-text">
+        The guest texts the next day &mdash; different channel, same person.
+        The agent <strong>already knows</strong>: Elk Ridge Lodge, Dec 29&ndash;Jan 2, $4,200, group of 8,
+        hot tub was the hook. Zero repetition. The guest just says "we're in" and the agent
+        has everything it needs.
+      </div>
+    </div>
+
+    <!-- S8: Escalate to PM -->
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node highlight" style="flex: 1;">
+            <div class="node-label">Escalation to property manager</div>
+            <div class="tool-call">
+              <div><span class="fn">escalate-to-human</span> <span class="args">{ unitId: "aspen-01", reason: "Guest ready to book", context: "Group of 8, Dec 29-Jan 2, $4,200 quoted. Guest priorities: hot tub, ski-in, big kitchen. Conversation started via voice, continued via SMS." }</span></div>
+              <div class="result">PM notified. Direct line sent to guest.</div>
+            </div>
+            <div class="tool-call">
+              <div><span class="fn">send-sms</span> <span class="args">{ to: "+13035550147", body: "Here's your property manager's direct line: (970) 555-0312 (Mike). He's got all the details from our conversation so you won't have to repeat anything. Enjoy Aspen!" }</span></div>
+              <div class="result">SMS delivered</div>
+            </div>
+            <div class="brain-write">
+              <div class="label">Saved to memory</div>
+              Guest chose Elk Ridge Lodge. Escalated to PM Mike. Full conversation context passed.
+              Conversation spanned 2 channels (voice + SMS) over 2 days.
+              Intent: booking. Outcome: warm handoff.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 8</div>
+      <div class="narration-text">
+        The agent hands off to the property manager with <strong>the full conversation summary</strong> &mdash;
+        what the guest wants, what they asked about, what was quoted, which channel they prefer.
+        The PM picks up where the agent left off. The guest never explains anything twice.
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= CUSTOMER SERVICE SCENARIO ================= -->
+  <div class="scenario" id="scene-cs">
+    <div class="scenario-label">Customer Service Agent &mdash; Complete Flow</div>
+    <div class="scenario-title">Check-in crisis to resolution</div>
+    <div class="scenario-subtitle">
+      A returning guest can't get into their cabin. The CS agent recognizes them,
+      pulls their booking, troubleshoots across channels, and knows exactly when
+      to bring in a human.
+    </div>
+
+    <!-- CS1: Inbound email + identify returning guest -->
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node highlight" style="flex: 0 0 180px;">
+            <div class="node-label">Channel</div>
+            <div class="channel-badge">Email</div>
+            <div style="margin-top: 8px; font-size: 13px; color: var(--text-secondary);">
+              From: sarah@gmail.com<br>
+              Subject: Can't get in!
+            </div>
+          </div>
+          <div class="node" style="flex: 1;">
+            <div class="node-label">Agent identifies returning guest</div>
+            <div class="tool-call">
+              <div><span class="fn">lookup-guest</span> <span class="args">{ email: "sarah@gmail.com" }</span></div>
+              <div class="result">Existing guest. 3 prior conversations (1 voice, 2 SMS). Last contact: booked Snowmass Retreat via sales agent 2 weeks ago.</div>
+            </div>
+            <div class="brain-write">
+              <div class="label">Context loaded from memory</div>
+              Sarah booked Snowmass Retreat through the sales agent. Group of 6.
+              She asked about early check-in during the sales call. Prefers text communication.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 1</div>
+      <div class="narration-text">
+        Sarah emails about a problem. The agent doesn't just recognize her email &mdash;
+        it loads her <strong>full history across all channels</strong>. It knows she booked through the sales agent,
+        that she's part of a group of 6, and that she asked about early check-in on the original call.
+      </div>
+    </div>
+
+    <!-- CS2: Load brain + booking lookup -->
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node" style="flex: 1;">
+            <div class="node-label">Brain &mdash; sections loaded for CS</div>
+            <div class="brain-sections">
+              <span class="brain-tag active">identity</span>
+              <span class="brain-tag active">voice</span>
+              <span class="brain-tag">audience</span>
+              <span class="brain-tag">business</span>
+              <span class="brain-tag active">hospitality</span>
+              <span class="brain-tag">visual</span>
+            </div>
+            <div class="node-body" style="margin-top: 10px;">
+              CS loads 3 sections. The hospitality section tells the agent how
+              check-in works, how to communicate with stressed guests,
+              and what common issues look like.
+            </div>
+          </div>
+          <div class="node highlight" style="flex: 1;">
+            <div class="node-label">Tools: booking + property details</div>
+            <div class="tool-call">
+              <div><span class="fn">lookup-booking</span> <span class="args">{ guestEmail: "sarah@gmail.com", status: "active" }</span></div>
+              <div class="result">Booking #WDR-4821. Snowmass Retreat (snowmass-02). Check-in: today 4pm. Code: 4829. Guest count: 6.</div>
+            </div>
+            <div class="tool-call">
+              <div><span class="fn">get-property-details</span> <span class="args">{ unitId: "snowmass-02" }</span></div>
+              <div class="result">Lock: Schlage Encode. Instructions: press Schlage button, then enter code. Backup: lockbox by garage door, code 7714. PM: Mike (970) 555-0312.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 2</div>
+      <div class="narration-text">
+        The agent loads 3 brain sections (not all 6 &mdash; CS doesn't need audience or visual).
+        It pulls the active booking and the property's lock details, including the <strong>backup access method</strong>.
+        It knows the lock type so it can give specific instructions, not generic ones.
+      </div>
+    </div>
+
+    <!-- CS3: First response with solution -->
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node highlight" style="flex: 1;">
+            <div class="node-label">Agent response (email)</div>
+            <div class="email-block">
+              Hi Sarah,<br><br>
+              Sorry you're having trouble getting in! Your door code for Snowmass Retreat is <strong>4829</strong>.
+              The Schlage lock has a specific sequence: press the <strong>Schlage button first</strong> (the big one at the top),
+              wait for the light, then enter 4829.<br><br>
+              If that doesn't work, there's a backup lockbox by the garage door on the left side &mdash;
+              code <strong>7714</strong>. There's a physical key inside.<br><br>
+              Let me know if you get in okay!<br><br>
+              &mdash; Wander Guest Services
+            </div>
+            <div class="brain-write">
+              <div class="label">Saved to memory</div>
+              Check-in issue reported. Provided primary code (4829) + lock instructions + backup lockbox (7714).
+              Awaiting confirmation from guest.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 3</div>
+      <div class="narration-text">
+        The agent writes a specific, helpful email &mdash; not "try your code again" but the actual
+        lock sequence for a Schlage Encode. It includes the backup option proactively.
+        <strong>The tone comes from the brain's hospitality section: empathetic first, solution second.</strong>
+      </div>
+    </div>
+
+    <!-- TIME SKIP -->
+    <div class="time-skip">20 minutes later &mdash; guest replies via SMS</div>
+
+    <!-- CS4: Guest replies on different channel -->
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node" style="flex: 0 0 180px;">
+            <div class="node-label">Channel switch</div>
+            <div class="channel-badge crossed">Email</div>
+            <div style="margin-top: 6px;"></div>
+            <div class="channel-badge">SMS</div>
+            <div style="margin-top: 8px; font-size: 13px; color: var(--text-secondary);">
+              Faster channel &mdash;<br>she's standing outside
+            </div>
+          </div>
+          <div class="node highlight" style="flex: 1;">
+            <div class="node-label">Agent has full context from the email</div>
+            <div class="convo">
+              <div class="msg-sender right">Sarah (SMS)</div>
+              <div class="msg guest">Neither code works. We've been standing outside for 30 min with our bags. Kids are cold.</div>
+              <div class="msg-sender">CS Agent</div>
+              <div class="msg agent">I'm so sorry Sarah. I know you tried both the door code and the lockbox. Let me get Mike, the property manager, on the phone right now. He can come let you in directly. Hang tight.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 4</div>
+      <div class="narration-text">
+        Sarah switches to SMS &mdash; she's standing outside, email is too slow.
+        The agent <strong>already knows what she tried</strong> from the email thread.
+        It doesn't ask "did you try the code?" It acknowledges both attempts and immediately
+        escalates. <strong>It knows it can't fix a physical lock remotely.</strong>
+      </div>
+    </div>
+
+    <!-- CS5: Escalate to human -->
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node highlight" style="flex: 1;">
+            <div class="node-label">Escalation with full context</div>
+            <div class="tool-call">
+              <div><span class="fn">escalate-to-human</span> <span class="args">{ unitId: "snowmass-02", urgency: "high", reason: "Guest locked out, both codes failed", context: "Sarah, booking #WDR-4821, group of 6 with kids. Tried primary code 4829 (Schlage sequence) and backup lockbox 7714. Neither worked. Standing outside 30+ min. Needs physical access." }</span></div>
+              <div class="result">PM Mike notified via call + SMS. ETA: 12 minutes.</div>
+            </div>
+            <div class="tool-call">
+              <div><span class="fn">send-sms</span> <span class="args">{ to: "+13035550147", body: "Mike (the property manager) is on his way - about 12 minutes. He'll let you in directly. I'm sorry about this, Sarah." }</span></div>
+              <div class="result">SMS delivered</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 5</div>
+      <div class="narration-text">
+        The escalation includes <strong>everything the PM needs</strong>: who, which property, what was tried,
+        how long they've been waiting, that there are kids. The PM doesn't call Sarah to ask
+        "what seems to be the problem?" He shows up and opens the door.
+      </div>
+    </div>
+
+    <!-- CS6: Follow-up after resolution -->
+    <div class="time-skip">1 hour later &mdash; agent follows up</div>
+
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node highlight" style="flex: 1;">
+            <div class="node-label">Proactive follow-up</div>
+            <div class="tool-call">
+              <div><span class="fn">send-sms</span> <span class="args">{ to: "+13035550147", body: "Hey Sarah, just checking in - did Mike get you settled? Hope the kids are warming up. Let us know if you need anything at all during your stay." }</span></div>
+              <div class="result">SMS delivered</div>
+            </div>
+            <div class="convo" style="margin-top: 12px;">
+              <div class="msg-sender right">Sarah (SMS)</div>
+              <div class="msg guest">Yes! All good now. Mike was great. The place is beautiful, thank you!</div>
+            </div>
+            <div class="brain-write">
+              <div class="label">Saved to memory</div>
+              Lock issue resolved by PM Mike. Both digital codes were non-functional (possible battery or
+              reprogramming issue &mdash; flag for maintenance). Guest satisfied after resolution. Total
+              resolution time: ~45 min. Conversation spanned email + SMS. Guest prefers SMS for urgent issues.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 6</div>
+      <div class="narration-text">
+        The agent follows up without being asked. It logs the full incident: what happened, how it was resolved,
+        and flags the lock for maintenance. <strong>Next time Sarah contacts Wander &mdash; on any channel &mdash;
+        every agent will know this history.</strong> And the maintenance team gets a heads up about the lock.
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MARKETING SCENARIO ================= -->
+  <div class="scenario" id="scene-marketing">
+    <div class="scenario-label">Marketing Agent &mdash; Complete Flow</div>
+    <div class="scenario-title">Content from conversations, not guesswork</div>
+    <div class="scenario-subtitle">
+      A property manager asks for a listing. The marketing agent mines real
+      guest conversations, generates copy in the brand voice, produces SEO content,
+      and drafts a campaign email &mdash; all grounded in what actual people said.
+    </div>
+
+    <!-- M1: PM request + brain load -->
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node highlight" style="flex: 0 0 180px;">
+            <div class="node-label">Channel</div>
+            <div class="channel-badge">Dashboard</div>
+            <div style="margin-top: 8px; font-size: 13px; color: var(--text-secondary);">
+              PM requests:<br>"Write a listing for<br>Elk Ridge Lodge"
+            </div>
+          </div>
+          <div class="node" style="flex: 1;">
+            <div class="node-label">Brain &mdash; sections loaded for marketing</div>
+            <div class="brain-sections">
+              <span class="brain-tag active">identity</span>
+              <span class="brain-tag active">voice</span>
+              <span class="brain-tag active">audience</span>
+              <span class="brain-tag active">business</span>
+              <span class="brain-tag">hospitality</span>
+              <span class="brain-tag active">visual</span>
+            </div>
+            <div class="node-body" style="margin-top: 10px;">
+              Marketing loads 5 sections: identity for brand name, voice for writing style,
+              audience for who we're targeting, business for positioning, and visual for image direction.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 1</div>
+      <div class="narration-text">
+        A PM asks the marketing agent to write a listing. The agent loads 5 brain sections &mdash;
+        it skips hospitality (that's for guest-facing agents) but grabs visual (it needs to know
+        the brand's aesthetic direction for image recommendations).
+      </div>
+    </div>
+
+    <!-- M2: Pull property data -->
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node highlight" style="flex: 1;">
+            <div class="node-label">Tool: property details</div>
+            <div class="tool-call">
+              <div><span class="fn">get-property-details</span> <span class="args">{ unitId: "aspen-01" }</span></div>
+              <div class="result">Elk Ridge Lodge. 4BR/3BA, 2,800 sq ft. Aspen, CO. Hot tub (private, valley views). Ski-in (200ft to lift). Wolf range, double oven, island seats 6, dining seats 10. Ski storage. Heated driveway. Fireplace. Mountain views from every room.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 2</div>
+      <div class="narration-text">
+        The agent pulls the raw property data first &mdash; square footage, amenities, everything.
+        This is the foundation, but <strong>a list of features isn't a listing.</strong>
+        The next step is what makes this agent different.
+      </div>
+    </div>
+
+    <!-- M3: Mine conversation data -->
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node highlight" style="flex: 1;">
+            <div class="node-label">Conversation intelligence &mdash; what guests actually say</div>
+            <div class="node-body" style="margin-bottom: 10px;">
+              The marketing agent reads across <strong>all guest conversations</strong> about this property &mdash;
+              sales calls, CS interactions, post-stay feedback. It's looking for patterns:
+              what do people ask about? What do they love? What surprises them?
+            </div>
+            <div class="tool-call">
+              <div><span class="fn">analyze-reviews</span> <span class="args">{ unitId: "aspen-01", sources: ["conversations", "reviews"] }</span></div>
+              <div class="result">
+                Top themes from 47 guest interactions:<br>
+                "hot tub views" (23 mentions) &mdash; strongest signal<br>
+                "ski-in convenience" (18 mentions) &mdash; "literally walked out the door and onto the slope"<br>
+                "kitchen was amazing" (12 mentions) &mdash; group cooking is a highlight<br>
+                "quiet neighborhood" (9 mentions) &mdash; contrast to town<br>
+                "heated driveway" (7 mentions) &mdash; unexpected delight, mentioned in every winter review<br>
+                Common sales question: "how close to the slopes?" (asked in 60% of calls)
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 3</div>
+      <div class="narration-text">
+        This is the key. The marketing agent doesn't guess what to highlight &mdash;
+        it reads what guests <strong>actually said</strong> across sales calls and service interactions.
+        "Hot tub views" was mentioned 23 times. "Heated driveway" was an unexpected delight.
+        60% of sales calls ask about slope distance. <strong>The listing writes itself from real data.</strong>
+      </div>
+    </div>
+
+    <!-- M4: Generate listing -->
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node highlight" style="flex: 1;">
+            <div class="node-label">Generated listing &mdash; brand voice, guest language</div>
+            <div class="gen-content">
+              <strong>Elk Ridge Lodge</strong> &mdash; Aspen, Colorado<br><br>
+              End the day where the mountain meets the sky. Elk Ridge sits 200 feet from the nearest lift &mdash;
+              genuinely ski-in, not "ski-adjacent." The private hot tub is what guests can't stop talking about:
+              valley views, stars overhead, snow on the rails, nobody else around.<br><br>
+              Four bedrooms, three baths, a kitchen built for the group that cooks together.
+              Wolf range, double oven, an island big enough for everyone to crowd around
+              with wine glasses while someone figures out the pasta. Dining table seats ten.<br><br>
+              The heated driveway is the detail that surprises people.
+              No ice, no scraping, no stress. Just snow on the peaks and warmth underfoot.<br><br>
+              Ski-in. Soak. Sleep. Repeat.
+            </div>
+            <div class="node-body" style="margin-top: 10px;">
+              Note: "can't stop talking about" mirrors actual guest frequency. "Genuinely ski-in" addresses
+              the #1 sales call question. "Heated driveway" highlighted because guests mention it as
+              an unexpected delight. All written in the brand voice from the brain's voice section.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 4</div>
+      <div class="narration-text">
+        The listing leads with what guests actually care about, in the order they care about it.
+        It addresses the most common sales objection ("how close to slopes?") directly.
+        It uses the language guests used ("can't stop talking about") not marketing speak.
+        <strong>Every sentence is backed by conversation data.</strong>
+      </div>
+    </div>
+
+    <!-- M5: SEO content -->
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node highlight" style="flex: 1;">
+            <div class="node-label">SEO content &mdash; targeting real search behavior</div>
+            <div class="tool-call">
+              <div><span class="fn">generate-seo-content</span> <span class="args">{ unitId: "aspen-01", types: ["meta", "keywords", "structured-data"] }</span></div>
+              <div class="result" style="color: var(--text-secondary);">
+                Title: Elk Ridge Lodge | Ski-In Cabin with Hot Tub in Aspen<br>
+                Meta: 4-bedroom Aspen cabin 200ft from the lift. Private hot tub with valley views. Sleeps 8-10. Gourmet kitchen. Heated driveway.<br>
+                Keywords: aspen ski-in cabin, aspen hot tub rental, luxury aspen vacation rental, aspen cabin sleeps 8, aspen new years cabin<br>
+                Schema: VacationRental, sleeps 10, 4BR/3BA, amenities[hot-tub, ski-in, fireplace, heated-driveway]
+              </div>
+            </div>
+            <div class="node-body" style="margin-top: 10px;">
+              Keywords are derived from actual search-like phrases guests use in sales calls:
+              "ski-in cabin in Aspen," "cabin with hot tub Aspen," "Aspen cabin for New Year's."
+              <strong>Guest language is SEO language.</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 5</div>
+      <div class="narration-text">
+        SEO isn't a separate exercise. The agent uses the same conversation data to generate keywords &mdash;
+        because the phrases guests use on the phone ("ski-in cabin in Aspen") are the same
+        phrases they type into Google. <strong>Sales conversations are keyword research.</strong>
+      </div>
+    </div>
+
+    <!-- M6: Campaign email draft -->
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node highlight" style="flex: 1;">
+            <div class="node-label">Campaign email &mdash; targeting the right persona</div>
+            <div class="node-body" style="margin-bottom: 10px;">
+              The agent reads the brain's audience section to identify which persona matches
+              Elk Ridge's strongest guest signal: groups who cook together and prioritize ski-in access.
+            </div>
+            <div class="gen-content">
+              <strong>Subject:</strong> The cabin your group is going to fight over<br><br>
+              <strong>To:</strong> "Group travelers" segment (families 6+, searched Aspen/CO, winter dates)<br><br>
+              You know the trip where everyone says "we should do that" and it actually happens?
+              This is the cabin for that trip.<br><br>
+              Elk Ridge Lodge in Aspen. Walk out the door, you're on the slope. Walk back in,
+              there's a kitchen big enough for the person who insists on cooking and the five people
+              watching. Then the hot tub with valley views until someone calls it a night.<br><br>
+              Four bedrooms. Sleeps the whole crew.<br><br>
+              [Check availability &rarr;]
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 6</div>
+      <div class="narration-text">
+        The campaign email targets the persona that actually books this property: groups.
+        The language matches how these guests talk in sales calls ("the whole crew," cooking together).
+        The subject line creates urgency without feeling like spam.
+        <strong>Audience data from the brain + conversation patterns = targeted content.</strong>
+      </div>
+    </div>
+
+    <!-- M7: The feedback loop -->
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node" style="flex: 1;">
+            <div class="node-label">The feedback loop</div>
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 2; color: var(--text-secondary);">
+              <span style="color: var(--text);">Sales calls</span> reveal what guests ask about and what convinces them<br>
+              <span style="color: var(--text);">CS interactions</span> reveal what guests love and what breaks<br>
+              <span style="color: var(--text);">Marketing reads both</span> to create content that matches reality<br>
+              <span style="color: var(--text);">Better content</span> attracts more of the right guests<br>
+              <span style="color: var(--text);">More conversations</span> make the data richer<br>
+              <span style="color: var(--text);">Cycle repeats.</span> Every interaction makes marketing more accurate.
+            </div>
+            <div class="brain-write" style="margin-top: 16px;">
+              <div class="label">Saved to memory</div>
+              Generated listing, SEO, and campaign email for Elk Ridge Lodge.
+              Primary content angles: hot tub views (#1), ski-in proximity (#2), group kitchen (#3).
+              Target persona: group travelers, 6-10 guests, winter.
+              All content grounded in 47 guest conversations.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Step 7</div>
+      <div class="narration-text">
+        This is the loop that makes the whole system compound.
+        Sales agents learn what guests want. CS agents learn what guests love.
+        Marketing reads both and creates content that attracts <strong>more of the right guests</strong>,
+        who then have more conversations, which make the content even better.
+        The brain gets smarter with every interaction.
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= BRAIN DETAIL ================= -->
+  <div class="scenario" id="scene-brain">
+    <div class="scenario-label">The Brain</div>
+    <div class="scenario-title">Shared knowledge, separate slices</div>
+    <div class="scenario-subtitle">
+      The brain stores everything the agents need to know about the brand.
+      Each agent reads only what's relevant. The brain learns from every conversation.
+    </div>
+
+    <div class="diagram">
+      <div class="arch-diagram">
+        <div class="arch-row">
+          <div class="arch-label">Identity</div>
+          <div class="arch-content" style="flex-direction: column; align-items: flex-start; gap: 2px;">
+            <span style="font-size: 13px;">Business name, tagline, mission, core values, agent persona name</span>
+            <span style="font-size: 11px; color: var(--text-muted);">Used by: all agents</span>
+          </div>
+        </div>
+        <div class="arch-row">
+          <div class="arch-label">Voice</div>
+          <div class="arch-content" style="flex-direction: column; align-items: flex-start; gap: 2px;">
+            <span style="font-size: 13px;">Tone, writing style, personality, greeting, words to use and avoid</span>
+            <span style="font-size: 11px; color: var(--text-muted);">Used by: all agents</span>
+          </div>
+        </div>
+        <div class="arch-row">
+          <div class="arch-label">Audience</div>
+          <div class="arch-content" style="flex-direction: column; align-items: flex-start; gap: 2px;">
+            <span style="font-size: 13px;">Target audience description, buyer personas with motivations</span>
+            <span style="font-size: 11px; color: var(--text-muted);">Used by: sales, marketing</span>
+          </div>
+        </div>
+        <div class="arch-row">
+          <div class="arch-label">Business</div>
+          <div class="arch-content" style="flex-direction: column; align-items: flex-start; gap: 2px;">
+            <span style="font-size: 13px;">Property types, locations, USPs, pricing positioning, differentiators, common objections</span>
+            <span style="font-size: 11px; color: var(--text-muted);">Used by: sales, marketing</span>
+          </div>
+        </div>
+        <div class="arch-row">
+          <div class="arch-label">Hospitality</div>
+          <div class="arch-content" style="flex-direction: column; align-items: flex-start; gap: 2px;">
+            <span style="font-size: 13px;">Check-in experience, guest communication style, special touches, common guest questions</span>
+            <span style="font-size: 11px; color: var(--text-muted);">Used by: sales, customer service</span>
+          </div>
+        </div>
+        <div class="arch-row">
+          <div class="arch-label">Visual</div>
+          <div class="arch-content" style="flex-direction: column; align-items: flex-start; gap: 2px;">
+            <span style="font-size: 13px;">Visual style direction (cinematic, editorial, minimal), notes for image selection</span>
+            <span style="font-size: 11px; color: var(--text-muted);">Used by: marketing</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">How it learns</div>
+      <div class="narration-text">
+        Every conversation is saved to shared memory. When the sales agent learns a guest loves hot tubs,
+        the CS agent sees that context if they call with an issue. When 23 guests mention "amazing views,"
+        the marketing agent uses their actual words in listings. <strong>The brain gets smarter with every interaction.</strong>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">Unit overrides</div>
+      <div class="narration-text">
+        The brain works at the organization level, but individual properties can override specific sections.
+        Elk Ridge Lodge can have its own hospitality notes ("hot tub is behind the garage, not the deck")
+        without changing the brand-wide defaults.
+      </div>
+    </div>
+
+    <div class="diagram">
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.8; color: var(--text-secondary);">
+        <div style="color: var(--text-muted);">// What /decide does on every interaction:</div>
+        <br>
+        <div><span style="color: var(--text);">1.</span> Guest contacts via any channel</div>
+        <div><span style="color: var(--text);">2.</span> Identify guest &rarr; load conversation history (all channels)</div>
+        <div><span style="color: var(--text);">3.</span> Determine agent type (sales / cs / marketing)</div>
+        <div><span style="color: var(--text);">4.</span> Load brain sections for that agent</div>
+        <div><span style="color: var(--text);">5.</span> Build prompt: brand voice + persona rules + tool rules</div>
+        <div><span style="color: var(--text);">6.</span> LLM decides what to do &rarr; calls tools as needed</div>
+        <div><span style="color: var(--text);">7.</span> Format response for the channel (voice, SMS, email, chat)</div>
+        <div><span style="color: var(--text);">8.</span> Save everything back to memory</div>
+      </div>
+    </div>
+
+    <div class="narration">
+      <div class="narration-step">The compound effect</div>
+      <div class="narration-text">
+        Sales conversations teach marketing what to write.
+        CS conversations teach sales what to promise.
+        Marketing content attracts guests who have better conversations.
+        <strong>Three agents, one brain, compounding intelligence.</strong>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Fixed bottom nav -->
+<div class="nav">
+  <div class="nav-inner">
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="go('overview')">Overview</button>
+      <button class="nav-tab" onclick="go('sales')">Sales</button>
+      <button class="nav-tab" onclick="go('cs')">Customer Service</button>
+      <button class="nav-tab" onclick="go('marketing')">Marketing</button>
+      <button class="nav-tab" onclick="go('brain')">The Brain</button>
+    </div>
+    <div class="nav-arrows">
+      <button class="nav-btn" id="prevBtn" onclick="prev()" disabled>&larr;</button>
+      <div class="progress" id="progress"></div>
+      <button class="nav-btn primary" id="nextBtn" onclick="next()">Next &rarr;</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const scenes = ['overview', 'sales', 'cs', 'marketing', 'brain'];
+let current = 0;
+
+function go(id) {
+  current = scenes.indexOf(id);
+  render();
+}
+
+function next() {
+  if (current < scenes.length - 1) { current++; render(); }
+}
+
+function prev() {
+  if (current > 0) { current--; render(); }
+}
+
+function render() {
+  document.querySelectorAll('.scenario').forEach(s => s.classList.remove('active'));
+  document.getElementById('scene-' + scenes[current]).classList.add('active');
+
+  document.querySelectorAll('.nav-tab').forEach((t, i) => {
+    t.classList.toggle('active', i === current);
+  });
+
+  document.getElementById('prevBtn').disabled = current === 0;
+  const nextBtn = document.getElementById('nextBtn');
+  nextBtn.disabled = current === scenes.length - 1;
+  nextBtn.textContent = current === scenes.length - 1 ? 'Done' : 'Next \u2192';
+
+  const p = document.getElementById('progress');
+  p.innerHTML = scenes.map((_, i) =>
+    `<div class="progress-dot ${i < current ? 'done' : ''} ${i === current ? 'current' : ''}"></div>`
+  ).join('');
+
+  document.getElementById('stepIndicator').textContent = `${current + 1} / ${scenes.length}`;
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); next(); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }
+});
+
+render();
+</script>
+
+</body>
+</html>
